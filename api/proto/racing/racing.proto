@@ -28,6 +28,8 @@ message ListRacesResponse {
 // Filter for listing races.
 message ListRacesRequestFilter {
   repeated int64 meeting_ids = 1;
+  // Use optional so we can check for nil, since both true and false are valid values.
+  optional bool visible = 2;
 }
 
 /* Resources */
