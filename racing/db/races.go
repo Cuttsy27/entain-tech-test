@@ -72,6 +72,12 @@ func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFil
 		return query, args
 	}
 
+	// Check if "Visible" is set as a filter option, and if so, add it to the query clauses.
+	if filter.Visible != nil {
+		clauses = append(clauses, "visible = ?")
+		args = append(args, *filter.Visible)
+	}
+
 	if len(filter.MeetingIds) > 0 {
 		clauses = append(clauses, "meeting_id IN ("+strings.Repeat("?,", len(filter.MeetingIds)-1)+"?)")
 
