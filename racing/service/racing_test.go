@@ -14,7 +14,7 @@ type mockRacesRepo struct{}
 func (m *mockRacesRepo) Init() error { return nil }
 
 // Need to mock the return values from the List method so the repo "returns" what the service expects, so we can test the service logic
-func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error) {
+func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
 	races := []*racing.Race{
 		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1},
 		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2},

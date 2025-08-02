@@ -18,7 +18,7 @@ type RacesRepo interface {
 	Init() error
 
 	// List will return a list of races.
-	List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error)
+	List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error)
 }
 
 type racesRepo struct {
@@ -43,7 +43,7 @@ func (r *racesRepo) Init() error {
 	return err
 }
 
-func (r *racesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error) {
+func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
 	var (
 		err   error
 		query string
@@ -53,6 +53,7 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race,
 	query = getRaceQueries()[racesList]
 
 	query, args = r.applyFilter(query, filter)
+	query = r.applyOrder(query, orderBy)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
@@ -91,6 +92,36 @@ func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFil
 	}
 
 	return query, args
+}
+
+func (repo *racesRepo) applyOrder(query string, orderBy string) string {
+	if orderBy == "" {
+		return query
+	}
+	// Validate orderBy against a list of valid fields to prevent SQL injection.
+	validFields := []string{"advertised_start_time"}
+
+	orderBy = strings.TrimSpace(orderBy)
+	// split string by commas to allow multiple order by fields
+	orderByFields := strings.Split(orderBy, ",")
+
+	queryOrderBy := []string{}
+
+	for _, field := range orderByFields {
+		field = strings.TrimSpace(field)
+		for _, validField := range validFields {
+			// Remove possible "asc" or "desc" from field before comparison
+			fieldName := strings.Fields(field)[0]
+			if fieldName == validField {
+				queryOrderBy = append(queryOrderBy, field)
+			}
+		}
+	}
+	if len(queryOrderBy) > 0 {
+		query += " ORDER BY " + strings.Join(queryOrderBy, ", ")
+	}
+
+	return query
 }
 
 func (m *racesRepo) scanRaces(
