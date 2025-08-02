@@ -10,6 +10,8 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"git.neds.sh/matty/entain/racing/proto/racing"
+
+	"git.neds.sh/matty/entain/racing/utils"
 )
 
 // RacesRepo provides repository access to races.
@@ -53,7 +55,7 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) 
 	query = getRaceQueries()[racesList]
 
 	query, args = r.applyFilter(query, filter)
-	query = r.applyOrder(query, orderBy)
+	query = r.applyOrderBy(query, orderBy)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
@@ -94,7 +96,7 @@ func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFil
 	return query, args
 }
 
-func (repo *racesRepo) applyOrder(query string, orderBy string) string {
+func (repo *racesRepo) applyOrderBy(query string, orderBy string) string {
 	if orderBy == "" {
 		return query
 	}
@@ -109,18 +111,25 @@ func (repo *racesRepo) applyOrder(query string, orderBy string) string {
 
 	for _, field := range orderByFields {
 		field = strings.TrimSpace(field)
-		for _, validField := range validFields {
-			// Remove possible "asc" or "desc" from field before comparison
-			fieldName := strings.Fields(field)[0]
-			if fieldName == validField {
-				queryOrderBy = append(queryOrderBy, field)
-			}
+
+		// Extract the field name (before any direction like ASC or DESC)
+		fieldName := strings.Fields(field)[0]
+
+		// Check if the field is valid
+		isValidField := utils.Contains(validFields, fieldName)
+		if !isValidField {
+			continue // Skip invalid fields
 		}
+		queryOrderBy = append(queryOrderBy, field)
 	}
+
+	// If queryOrderBy has fields it means they are valid and can be added to the query. Only add " ORDER BY " if there are valid fields.
 	if len(queryOrderBy) > 0 {
 		query += " ORDER BY " + strings.Join(queryOrderBy, ", ")
 	}
 
+	// Return the potentially modified query
+	// If no valid fields were found, the query remains unchanged.
 	return query
 }
 
