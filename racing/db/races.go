@@ -15,6 +15,8 @@ import (
 )
 
 var advertised_start_time = "advertised_start_time"
+
+// Add more in the future as we want to order by other fields
 var validOrderByFields = []string{advertised_start_time}
 
 // RacesRepo provides repository access to races.
@@ -24,6 +26,9 @@ type RacesRepo interface {
 
 	// List will return a list of races.
 	List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error)
+
+	// Get will return a specific Race by its ID.
+	Get(id int64) (*racing.Race, error)
 }
 
 type racesRepo struct {
@@ -78,6 +83,30 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) 
 	r.addStatusToRaces(races)
 
 	return races, nil
+}
+
+func (r *racesRepo) Get(id int64) (*racing.Race, error) {
+	var (
+		query string
+		args  []interface{}
+	)
+
+	query = getRaceQueries()[racesGet]
+
+	args = append(args, id)
+
+	row := r.db.QueryRow(query, args...)
+
+	race, err := r.scanRace(row)
+
+	if err != nil {
+		return nil, err
+	}
+
+	r.addStatusToRace(race)
+
+	return race, nil
+
 }
 
 func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFilter) (string, []interface{}) {
@@ -203,4 +232,27 @@ func (m *racesRepo) scanRaces(
 	}
 
 	return races, nil
+}
+
+func (m *racesRepo) scanRace(
+	row *sql.Row,
+) (*racing.Race, error) {
+	var race racing.Race
+	var advertisedStart time.Time
+
+	if err := row.Scan(&race.Id, &race.MeetingId, &race.Name, &race.Number, &race.Visible, &advertisedStart); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	ts, err := ptypes.TimestampProto(advertisedStart)
+	if err != nil {
+		return nil, err
+	}
+
+	race.AdvertisedStartTime = ts
+
+	return &race, nil
 }
