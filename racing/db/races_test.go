@@ -2,8 +2,11 @@ package db
 
 import (
 	"testing"
+	"time"
 
 	"git.neds.sh/matty/entain/racing/proto/racing"
+	"git.neds.sh/matty/entain/racing/utils"
+	"github.com/golang/protobuf/ptypes/timestamp"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -167,5 +170,60 @@ func TestApplyOrderBy(t *testing.T) {
 		want := baseQuery
 
 		assertOrderBy(t, got, want)
+	})
+}
+
+// Test addStatusToRace method to ensure it correctly sets the status of a single race
+func TestAddStatusToRace(t *testing.T) {
+	repo := &racesRepo{}
+
+	t.Run("adds CLOSED status when advertised_start_time is in the past", func(t *testing.T) {
+		race := &racing.Race{
+			Id:                  1,
+			Name:                "Race 1",
+			Visible:             true,
+			MeetingId:           1,
+			AdvertisedStartTime: utils.GetProtoTimestamp(2024, time.December, 25, 0, 0, 0),
+		}
+		repo.addStatusToRace(race)
+		if race.Status != racing.Race_CLOSED {
+			t.Errorf("expected race status to be CLOSED, got %v", race.Status)
+		}
+	})
+	t.Run("adds OPEN status when advertised_start_time is in the future", func(t *testing.T) {
+		now := time.Now().Unix()
+		race := &racing.Race{
+			Id:                  2,
+			Name:                "Race 2",
+			Visible:             true,
+			MeetingId:           1,
+			AdvertisedStartTime: &timestamp.Timestamp{Seconds: now + 100000},
+		}
+		repo.addStatusToRace(race)
+		if race.Status != racing.Race_OPEN {
+			t.Errorf("expected race status to be OPEN, got %v", race.Status)
+		}
+	})
+}
+
+// Test addStatusToRaces method to ensure it correctly sets the status for multiple races
+func TestAddStatusToRaces(t *testing.T) {
+	repo := &racesRepo{}
+
+	t.Run("adds status to all races", func(t *testing.T) {
+		now := time.Now().Unix()
+		races := []*racing.Race{
+			{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1, AdvertisedStartTime: utils.GetProtoTimestamp(2024, time.December, 25, 0, 0, 0)},
+			{Id: 2, Name: "Race 2", Visible: true, MeetingId: 1, AdvertisedStartTime: &timestamp.Timestamp{Seconds: now + 100000}},
+		}
+		repo.addStatusToRaces(races)
+		// The first race in the slice is specifically set to be in the past, so it should be CLOSED
+		if races[0].Status != racing.Race_CLOSED {
+			t.Errorf("expected race status to be %v, got %v", racing.Race_CLOSED, races[0].Status)
+		}
+		// The second race in the slice is specifically set to be in the future, so it should be OPEN
+		if races[1].Status != racing.Race_OPEN {
+			t.Errorf("expected race status to be %v, got %v", racing.Race_OPEN, races[1].Status)
+		}
 	})
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"git.neds.sh/matty/entain/racing/proto/racing"
+	"git.neds.sh/matty/entain/racing/utils"
 	"github.com/golang/protobuf/ptypes/timestamp"
 	"golang.org/x/net/context"
 	"google.golang.org/protobuf/proto"
@@ -19,8 +20,8 @@ func (m *mockRacesRepo) Init() error { return nil }
 // Need to mock the return values from the List method so the repo "returns" what the service expects, so we can test the service logic
 func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
 	races := []*racing.Race{
-		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1, AdvertisedStartTime: getTimestamp(2024, time.December, 25, 0, 0, 0)},
-		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2, AdvertisedStartTime: getTimestamp(2024, time.December, 24, 0, 0, 0)},
+		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1, AdvertisedStartTime: utils.GetProtoTimestamp(2024, time.December, 25, 0, 0, 0), Status: racing.Race_CLOSED},
+		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2, AdvertisedStartTime: &timestamp.Timestamp{Seconds: time.Now().Add(24 * time.Hour).Unix()}, Status: racing.Race_OPEN},
 	}
 	filteredRaces := []*racing.Race{}
 	// If the filter is set, we need to apply it
@@ -268,11 +269,30 @@ func TestListRacesOrderBy(t *testing.T) {
 	})
 }
 
-// getTimestamp returns a *timestamp.Timestamp for the specified date and time in UTC.
-func getTimestamp(year int, month time.Month, day, hour, min, sec int) *timestamp.Timestamp {
-	t := time.Date(year, month, day, hour, min, sec, 0, time.UTC)
-	return &timestamp.Timestamp{
-		Seconds: t.Unix(),
-		Nanos:   int32(t.Nanosecond()),
-	}
+// Does the service correctly get races with their statuses?
+// This is a test to ensure that the service layer correctly retrieves the status of each race.
+func TestRacesHaveStatus(t *testing.T) {
+	repo := &mockRacesRepo{}
+	service := NewRacingService(repo)
+	ctx := context.Background()
+	t.Run("returns races with correct status", func(t *testing.T) {
+		req := &racing.ListRacesRequest{}
+		resp, err := service.ListRaces(ctx, req)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(resp.Races) != 2 {
+			t.Errorf("expected 2 races, got %d", len(resp.Races))
+		}
+
+		if resp.Races[0].Status != racing.Race_CLOSED {
+			t.Errorf("expected race status to be %v, got %v", racing.Race_CLOSED, resp.Races[0].Status)
+		}
+
+		if resp.Races[1].Status != racing.Race_OPEN {
+			t.Errorf("expected race status to be %v, got %v", racing.Race_OPEN, resp.Races[1].Status)
+		}
+	})
 }
