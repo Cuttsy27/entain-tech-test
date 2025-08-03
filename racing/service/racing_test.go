@@ -1,10 +1,12 @@
 package service
 
 import (
+	"errors"
 	"sort"
 	"testing"
 	"time"
 
+	re "git.neds.sh/matty/entain/racing/errors"
 	"git.neds.sh/matty/entain/racing/proto/racing"
 	"git.neds.sh/matty/entain/racing/utils"
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -13,12 +15,17 @@ import (
 )
 
 // Mocking the repo for testing the service layer
-type mockRacesRepo struct{}
+type mockRacesRepo struct {
+	shouldError bool
+}
 
 func (m *mockRacesRepo) Init() error { return nil }
 
 // Need to mock the return values from the List method so the repo "returns" what the service expects, so we can test the service logic
 func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
+	if m.shouldError {
+		return nil, errors.New("[List] mock error")
+	}
 	races := []*racing.Race{
 		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1, AdvertisedStartTime: utils.GetProtoTimestamp(2024, time.December, 25, 0, 0, 0), Status: racing.Race_CLOSED},
 		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2, AdvertisedStartTime: &timestamp.Timestamp{Seconds: time.Now().Add(24 * time.Hour).Unix()}, Status: racing.Race_OPEN},
@@ -76,6 +83,19 @@ func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter, orderBy stri
 	}
 	// no filter set, return all potentially sorted races
 	return races, nil
+}
+func (m *mockRacesRepo) Get(id int64) (*racing.Race, error) {
+	if m.shouldError {
+		return nil, errors.New("[Get] mock error")
+	}
+	return &racing.Race{
+		Id:                  1,
+		Name:                "Race 1",
+		Visible:             true,
+		MeetingId:           1,
+		AdvertisedStartTime: utils.GetProtoTimestamp(2024, time.December, 25, 0, 0, 0),
+		Status:              racing.Race_CLOSED,
+	}, nil
 }
 
 func TestListRacesFilter(t *testing.T) {
@@ -293,6 +313,103 @@ func TestRacesHaveStatus(t *testing.T) {
 
 		if resp.Races[1].Status != racing.Race_OPEN {
 			t.Errorf("expected race status to be %v, got %v", racing.Race_OPEN, resp.Races[1].Status)
+		}
+	})
+}
+
+func TestListRaces(t *testing.T) {
+	repo := &mockRacesRepo{}
+	service := NewRacingService(repo)
+	ctx := context.Background()
+
+	t.Run("returns all races", func(t *testing.T) {
+		req := &racing.ListRacesRequest{}
+		resp, err := service.ListRaces(ctx, req)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if len(resp.Races) != 2 {
+			t.Errorf("expected 2 races, got %d", len(resp.Races))
+		}
+	})
+	t.Run("returns an error", func(t *testing.T) {
+		repo.shouldError = true                     // Simulate an error in the repo
+		defer func() { repo.shouldError = false }() // Reset after test
+		req := &racing.ListRacesRequest{}
+		resp, err := service.ListRaces(ctx, req)
+
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+
+		if resp != nil {
+			t.Errorf("expected nil response, got %v", resp)
+		}
+	})
+}
+
+func TestGetRace(t *testing.T) {
+	repo := &mockRacesRepo{}
+	service := NewRacingService(repo)
+	ctx := context.Background()
+
+	t.Run("returns race by ID", func(t *testing.T) {
+		req := &racing.GetRaceRequest{
+			Id: 1,
+		}
+
+		race, err := service.GetRace(ctx, req)
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if race == nil {
+			t.Errorf("expected race, got nil")
+		}
+
+		if race.Id != 1 {
+			t.Errorf("expected race ID 1, got %d", race.Id)
+		}
+	})
+
+	t.Run("returns an error for non-existent race", func(t *testing.T) {
+		repo.shouldError = true                     // Simulate an error in the repo
+		defer func() { repo.shouldError = false }() // Reset after test
+		req := &racing.GetRaceRequest{
+			Id: 999,
+		}
+
+		race, err := service.GetRace(ctx, req)
+
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+
+		if race != nil {
+			t.Errorf("expected nil race, got %v", race)
+		}
+	})
+
+	t.Run("returns ErrInvalidRaceID error for invalid race ID", func(t *testing.T) {
+		req := &racing.GetRaceRequest{
+			Id: 0,
+		}
+
+		race, err := service.GetRace(ctx, req)
+
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+
+		if race != nil {
+			t.Errorf("expected nil race, got %v", race)
+		}
+
+		if err != re.ErrInvalidRaceID {
+			t.Errorf("expected error %v, got %v", re.ErrInvalidRaceID, err)
 		}
 	})
 }
