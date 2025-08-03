@@ -138,7 +138,7 @@ func TestApplyOrderBy(t *testing.T) {
 
 		got := repo.applyOrderBy(baseQuery, "")
 
-		want := baseQuery
+		want := baseQuery + " ORDER BY advertised_start_time asc"
 
 		assertOrderBy(t, got, want)
 
@@ -147,11 +147,11 @@ func TestApplyOrderBy(t *testing.T) {
 		repo := &racesRepo{}
 
 		baseQuery := getRaceQueries()[racesList]
-		orderBy := "advertised_start_time DESC"
+		orderBy := "advertised_start_time desc"
 
 		got := repo.applyOrderBy(baseQuery, orderBy)
 
-		want := baseQuery + " ORDER BY advertised_start_time DESC"
+		want := baseQuery + " ORDER BY advertised_start_time desc"
 
 		assertOrderBy(t, got, want)
 	})
@@ -164,7 +164,7 @@ func TestApplyOrderBy(t *testing.T) {
 		got := repo.applyOrderBy(baseQuery, orderBy)
 
 		// Invalid orderBy should not change the query
-		want := baseQuery
+		want := baseQuery + " ORDER BY advertised_start_time asc"
 
 		assertOrderBy(t, got, want)
 	})

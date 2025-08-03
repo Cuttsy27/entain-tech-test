@@ -14,6 +14,9 @@ import (
 	"git.neds.sh/matty/entain/racing/utils"
 )
 
+var advertised_start_time = "advertised_start_time"
+var validOrderByFields = []string{advertised_start_time}
+
 // RacesRepo provides repository access to races.
 type RacesRepo interface {
 	// Init will initialise our races repository.
@@ -55,6 +58,7 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) 
 	query = getRaceQueries()[racesList]
 
 	query, args = r.applyFilter(query, filter)
+
 	query = r.applyOrderBy(query, orderBy)
 
 	rows, err := r.db.Query(query, args...)
@@ -97,36 +101,49 @@ func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFil
 }
 
 func (repo *racesRepo) applyOrderBy(query string, orderBy string) string {
-	if orderBy == "" {
-		return query
+	// Using a dict to set default order_by fields that can be overwritten by the user.
+	orderByDict := map[string]string{
+		advertised_start_time: "asc",
 	}
-	// Validate orderBy against a list of valid fields to prevent SQL injection.
-	validFields := []string{"advertised_start_time"}
 
 	orderBy = strings.TrimSpace(orderBy)
 	// split string by commas to allow multiple order by fields
 	orderByFields := strings.Split(orderBy, ",")
 
-	queryOrderBy := []string{}
+	if len(orderByFields) > 0 && orderBy != "" {
+		// If there are order_by fields provided by the user, loop and check for valid fields before updating the orderByDict
+		for _, field := range orderByFields {
+			field = strings.TrimSpace(field)
 
-	for _, field := range orderByFields {
-		field = strings.TrimSpace(field)
+			// Extract the field name (before any direction like ASC or DESC)
+			fieldName := strings.Fields(field)[0]
 
-		// Extract the field name (before any direction like ASC or DESC)
-		fieldName := strings.Fields(field)[0]
+			// Check if the field is valid
+			isValidField := utils.Contains(validOrderByFields, fieldName)
+			if !isValidField {
+				continue // Skip invalid fields
+			}
 
-		// Check if the field is valid
-		isValidField := utils.Contains(validFields, fieldName)
-		if !isValidField {
-			continue // Skip invalid fields
+			fieldDirection := "asc"
+
+			if len(strings.Fields(field)) > 1 {
+				fieldDirection = strings.ToLower(strings.Fields(field)[1])
+				orderByDict[fieldName] = fieldDirection
+			}
 		}
-		queryOrderBy = append(queryOrderBy, field)
 	}
 
-	// If queryOrderBy has fields it means they are valid and can be added to the query. Only add " ORDER BY " if there are valid fields.
-	if len(queryOrderBy) > 0 {
-		query += " ORDER BY " + strings.Join(queryOrderBy, ", ")
+	// We have a default orderBy, so we always append to the query
+	query += " ORDER BY "
+
+	queriesToAdd := []string{}
+
+	// Iterate the map to apply each field and its direction
+	for orderBy, direction := range orderByDict {
+		queriesToAdd = append(queriesToAdd, orderBy+" "+direction)
 	}
+
+	query += strings.Join(queriesToAdd, ", ")
 
 	// Return the potentially modified query
 	// If no valid fields were found, the query remains unchanged.
