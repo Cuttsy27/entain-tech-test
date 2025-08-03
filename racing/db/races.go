@@ -10,7 +10,12 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 
 	"git.neds.sh/matty/entain/racing/proto/racing"
+
+	"git.neds.sh/matty/entain/racing/utils"
 )
+
+var advertised_start_time = "advertised_start_time"
+var validOrderByFields = []string{advertised_start_time}
 
 // RacesRepo provides repository access to races.
 type RacesRepo interface {
@@ -18,7 +23,7 @@ type RacesRepo interface {
 	Init() error
 
 	// List will return a list of races.
-	List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error)
+	List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error)
 }
 
 type racesRepo struct {
@@ -43,7 +48,7 @@ func (r *racesRepo) Init() error {
 	return err
 }
 
-func (r *racesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error) {
+func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
 	var (
 		err   error
 		query string
@@ -53,6 +58,8 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race,
 	query = getRaceQueries()[racesList]
 
 	query, args = r.applyFilter(query, filter)
+
+	query = r.applyOrderBy(query, orderBy)
 
 	rows, err := r.db.Query(query, args...)
 	if err != nil {
@@ -91,6 +98,56 @@ func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFil
 	}
 
 	return query, args
+}
+
+func (repo *racesRepo) applyOrderBy(query string, orderBy string) string {
+	// Using a dict to set default order_by fields that can be overwritten by the user.
+	orderByDict := map[string]string{
+		advertised_start_time: "asc",
+	}
+
+	orderBy = strings.TrimSpace(orderBy)
+	// split string by commas to allow multiple order by fields
+	orderByFields := strings.Split(orderBy, ",")
+
+	if len(orderByFields) > 0 && orderBy != "" {
+		// If there are order_by fields provided by the user, loop and check for valid fields before updating the orderByDict
+		for _, field := range orderByFields {
+			field = strings.TrimSpace(field)
+
+			// Extract the field name (before any direction like ASC or DESC)
+			fieldName := strings.Fields(field)[0]
+
+			// Check if the field is valid
+			isValidField := utils.Contains(validOrderByFields, fieldName)
+			if !isValidField {
+				continue // Skip invalid fields
+			}
+
+			fieldDirection := "asc"
+
+			if len(strings.Fields(field)) > 1 {
+				fieldDirection = strings.ToLower(strings.Fields(field)[1])
+				orderByDict[fieldName] = fieldDirection
+			}
+		}
+	}
+
+	// We have a default orderBy, so we always append to the query
+	query += " ORDER BY "
+
+	queriesToAdd := []string{}
+
+	// Iterate the map to apply each field and its direction
+	for orderBy, direction := range orderByDict {
+		queriesToAdd = append(queriesToAdd, orderBy+" "+direction)
+	}
+
+	query += strings.Join(queriesToAdd, ", ")
+
+	// Return the potentially modified query
+	// If no valid fields were found, the query remains unchanged.
+	return query
 }
 
 func (m *racesRepo) scanRaces(

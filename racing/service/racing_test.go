@@ -1,9 +1,12 @@
 package service
 
 import (
+	"sort"
 	"testing"
+	"time"
 
 	"git.neds.sh/matty/entain/racing/proto/racing"
+	"github.com/golang/protobuf/ptypes/timestamp"
 	"golang.org/x/net/context"
 	"google.golang.org/protobuf/proto"
 )
@@ -14,10 +17,10 @@ type mockRacesRepo struct{}
 func (m *mockRacesRepo) Init() error { return nil }
 
 // Need to mock the return values from the List method so the repo "returns" what the service expects, so we can test the service logic
-func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.Race, error) {
+func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) ([]*racing.Race, error) {
 	races := []*racing.Race{
-		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1},
-		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2},
+		{Id: 1, Name: "Race 1", Visible: true, MeetingId: 1, AdvertisedStartTime: getTimestamp(2024, time.December, 25, 0, 0, 0)},
+		{Id: 2, Name: "Race 2", Visible: false, MeetingId: 2, AdvertisedStartTime: getTimestamp(2024, time.December, 24, 0, 0, 0)},
 	}
 	filteredRaces := []*racing.Race{}
 	// If the filter is set, we need to apply it
@@ -54,7 +57,23 @@ func (m *mockRacesRepo) List(filter *racing.ListRacesRequestFilter) ([]*racing.R
 			return filteredRaces, nil
 		}
 	}
-	// no filter set, return all races
+
+	if orderBy != "" {
+		// If orderBy is set, we can sort
+		switch orderBy {
+		case "advertised_start_time", "advertised_start_time asc":
+			// Sort by advertised_start_time in ascending order
+			sort.Slice(races, func(i, j int) bool {
+				return races[i].AdvertisedStartTime.Seconds < races[j].AdvertisedStartTime.Seconds
+			})
+		case "advertised_start_time desc":
+			// Sort by advertised_start_time in descending order
+			sort.Slice(races, func(i, j int) bool {
+				return races[i].AdvertisedStartTime.Seconds > races[j].AdvertisedStartTime.Seconds
+			})
+		}
+	}
+	// no filter set, return all potentially sorted races
 	return races, nil
 }
 
@@ -207,4 +226,53 @@ func TestListRacesFilter(t *testing.T) {
 			t.Errorf("races: %v", resp.Races)
 		}
 	})
+}
+
+func TestListRacesOrderBy(t *testing.T) {
+	repo := &mockRacesRepo{}
+	service := NewRacingService(repo)
+	ctx := context.Background()
+
+	t.Run("returns races ordered by advertised_start_time in descending order", func(t *testing.T) {
+		orderBy := "advertised_start_time desc"
+
+		req := &racing.ListRacesRequest{
+			OrderBy: orderBy,
+		}
+
+		resp, err := service.ListRaces(ctx, req)
+
+		if resp.Races[0].AdvertisedStartTime.Seconds < resp.Races[1].AdvertisedStartTime.Seconds {
+			t.Errorf("expected %d to be greater than %d", resp.Races[0].AdvertisedStartTime.Seconds, resp.Races[1].AdvertisedStartTime.Seconds)
+		}
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+	t.Run("returns races ordered by advertised_start_time in ascending order", func(t *testing.T) {
+		orderBy := "advertised_start_time"
+		req := &racing.ListRacesRequest{
+			OrderBy: orderBy,
+		}
+
+		resp, err := service.ListRaces(ctx, req)
+
+		if resp.Races[0].AdvertisedStartTime.Seconds > resp.Races[1].AdvertisedStartTime.Seconds {
+			t.Errorf("expected %d to be less than %d", resp.Races[0].AdvertisedStartTime.Seconds, resp.Races[1].AdvertisedStartTime.Seconds)
+		}
+
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+// getTimestamp returns a *timestamp.Timestamp for the specified date and time in UTC.
+func getTimestamp(year int, month time.Month, day, hour, min, sec int) *timestamp.Timestamp {
+	t := time.Date(year, month, day, hour, min, sec, 0, time.UTC)
+	return &timestamp.Timestamp{
+		Seconds: t.Unix(),
+		Nanos:   int32(t.Nanosecond()),
+	}
 }

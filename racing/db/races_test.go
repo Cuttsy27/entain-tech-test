@@ -7,6 +7,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// 100% coverage for applyFilter method
 func TestApplyFilter(t *testing.T) {
 	// Create an instance of a racesRepo to use applyFilter method
 	repo := &racesRepo{}
@@ -109,5 +110,62 @@ func TestApplyFilter(t *testing.T) {
 
 		assertCorrectQuery(t, gotQuery, wantQuery)
 		assertCorrectArgs(t, gotArgs, wantArgs)
+	})
+	t.Run("applyFilter with nil filter", func(t *testing.T) {
+		gotQuery, gotArgs := repo.applyFilter(baseQuery, nil)
+
+		wantQuery := baseQuery
+		wantArgs := []interface{}{}
+
+		assertCorrectQuery(t, gotQuery, wantQuery)
+		assertCorrectArgs(t, gotArgs, wantArgs)
+	})
+}
+
+// 100% coverage for applyOrderBy method
+func TestApplyOrderBy(t *testing.T) {
+	assertOrderBy := func(t testing.TB, got, want string) {
+		t.Helper()
+
+		if got != want {
+			t.Errorf("applyOrderBy() = %q, want %q", got, want)
+		}
+	}
+	t.Run("applyOrderBy with empty orderBy", func(t *testing.T) {
+		repo := &racesRepo{}
+
+		baseQuery := getRaceQueries()[racesList]
+
+		got := repo.applyOrderBy(baseQuery, "")
+
+		want := baseQuery + " ORDER BY advertised_start_time asc"
+
+		assertOrderBy(t, got, want)
+
+	})
+	t.Run("applyOrderBy with valid orderBy", func(t *testing.T) {
+		repo := &racesRepo{}
+
+		baseQuery := getRaceQueries()[racesList]
+		orderBy := "advertised_start_time desc"
+
+		got := repo.applyOrderBy(baseQuery, orderBy)
+
+		want := baseQuery + " ORDER BY advertised_start_time desc"
+
+		assertOrderBy(t, got, want)
+	})
+	t.Run("applyOrderBy with invalid orderBy", func(t *testing.T) {
+		repo := &racesRepo{}
+
+		baseQuery := getRaceQueries()[racesList]
+		orderBy := "invalid_field"
+
+		got := repo.applyOrderBy(baseQuery, orderBy)
+
+		// Invalid orderBy should not change the query
+		want := baseQuery + " ORDER BY advertised_start_time asc"
+
+		assertOrderBy(t, got, want)
 	})
 }
