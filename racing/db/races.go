@@ -66,7 +66,18 @@ func (r *racesRepo) List(filter *racing.ListRacesRequestFilter, orderBy string) 
 		return nil, err
 	}
 
-	return r.scanRaces(rows)
+	// Get the races as variable so they can be modified before returning
+	races, err := r.scanRaces(rows)
+
+	// Return early if there was an error
+	if err != nil {
+		return nil, err
+	}
+
+	// Add status to each race derived from their AdvertisedStartTime
+	r.addStatusToRaces(races)
+
+	return races, nil
 }
 
 func (r *racesRepo) applyFilter(query string, filter *racing.ListRacesRequestFilter) (string, []interface{}) {
@@ -148,6 +159,20 @@ func (repo *racesRepo) applyOrderBy(query string, orderBy string) string {
 	// Return the potentially modified query
 	// If no valid fields were found, the query remains unchanged.
 	return query
+}
+
+func (repo *racesRepo) addStatusToRaces(races []*racing.Race) {
+	for _, race := range races {
+		repo.addStatusToRace(race)
+	}
+}
+
+func (repo *racesRepo) addStatusToRace(race *racing.Race) {
+	if utils.IsProtoTimestampInPast(race.AdvertisedStartTime, utils.GetCurrentProtoTimestamp()) {
+		race.Status = racing.Race_CLOSED
+	} else {
+		race.Status = racing.Race_OPEN
+	}
 }
 
 func (m *racesRepo) scanRaces(
