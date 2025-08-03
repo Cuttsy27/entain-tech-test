@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	re "git.neds.sh/matty/entain/racing/errors"
 	"git.neds.sh/matty/entain/racing/proto/racing"
 	"git.neds.sh/matty/entain/racing/utils"
 	"github.com/golang/protobuf/ptypes/timestamp"
@@ -389,6 +390,26 @@ func TestGetRace(t *testing.T) {
 
 		if race != nil {
 			t.Errorf("expected nil race, got %v", race)
+		}
+	})
+
+	t.Run("returns ErrInvalidRaceID error for invalid race ID", func(t *testing.T) {
+		req := &racing.GetRaceRequest{
+			Id: 0,
+		}
+
+		race, err := service.GetRace(ctx, req)
+
+		if err == nil {
+			t.Fatalf("expected error, got nil")
+		}
+
+		if race != nil {
+			t.Errorf("expected nil race, got %v", race)
+		}
+
+		if err != re.ErrInvalidRaceID {
+			t.Errorf("expected error %v, got %v", re.ErrInvalidRaceID, err)
 		}
 	})
 }

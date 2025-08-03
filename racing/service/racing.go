@@ -2,6 +2,7 @@ package service
 
 import (
 	"git.neds.sh/matty/entain/racing/db"
+	"git.neds.sh/matty/entain/racing/errors"
 	"git.neds.sh/matty/entain/racing/proto/racing"
 	"golang.org/x/net/context"
 )
@@ -34,6 +35,9 @@ func (s *racingService) ListRaces(ctx context.Context, in *racing.ListRacesReque
 }
 
 func (s *racingService) GetRace(ctx context.Context, in *racing.GetRaceRequest) (*racing.Race, error) {
+	if in.Id <= 0 {
+		return nil, errors.ErrInvalidRaceID
+	}
 	race, err := s.racesRepo.Get(in.Id)
 	if err != nil {
 		return nil, err
