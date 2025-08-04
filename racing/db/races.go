@@ -238,16 +238,16 @@ func (m *racesRepo) scanRace(
 	row *sql.Row,
 ) (*racing.Race, error) {
 	var race racing.Race
-	var advertisedStart time.Time
+	var advertisedStartTime time.Time
 
-	if err := row.Scan(&race.Id, &race.MeetingId, &race.Name, &race.Number, &race.Visible, &advertisedStart); err != nil {
+	if err := row.Scan(&race.Id, &race.MeetingId, &race.Name, &race.Number, &race.Visible, &advertisedStartTime); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
 
-	ts, err := ptypes.TimestampProto(advertisedStart)
+	ts, err := ptypes.TimestampProto(advertisedStartTime)
 	if err != nil {
 		return nil, err
 	}
